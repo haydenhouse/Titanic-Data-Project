@@ -1,0 +1,72 @@
+set.seed(678)
+path <- 'https://raw.githubusercontent.com/guru99-edu/R-Programming/master/titanic_data.csv'
+titanic.data <-read.csv(path)
+View(titanic.data)
+
+# Because data is not in random order a shuffle is needed.
+shuffle.index <- sample(1:nrow(titanic.data))
+head(shuffle.index)
+titanic.data <- titanic.data[shuffle.index, ]
+head(titanic.data)
+
+# Data cleaning
+library(dplyr)
+titanic.data<-titanic.data %>%
+  select(-c(home.dest,cabin,name,x,ticket)) %>%
+  mutate(pclass = factor(pclass,levels = c(1,2,3),labels = c('Upper','Middle','Lower')),
+         survived = factor(survived,levels = c(0,1),labels = c('No','Yes'))) %>%
+  na.omit()
+titanic.data
+
+# Create train/test set 80% train 20% test
+create.train.test<-function(titanic.data,size = 0.8,train = TRUE){
+  n.row = nrow(titanic.data)
+  total.row = size*n.row
+  train.sample<- 1:total.row
+  if(train == TRUE){
+    return(titanic.data[train.sample,])
+  } else {
+    return(titanic.data[train.sample,])
+  }
+}
+
+# Test function and check dimension
+train<-create.train.test(titanic.data,0.8,train = TRUE)
+test<-create.train.test(titanic.data,0.8,train = FALSE)
+
+# To verify that randomness was correctly completed. Should be similar percentages
+prop.table(table(train$survived))
+prop.table(table(test$survived))
+
+# Build the model
+install.packages('rpart.plot')
+library(rpart.plot)
+library(rpart)
+fit<-rpart(survived~.,data = train,method = 'class')
+rpart.plot(fit,extra = 101)
+
+# Make a prediction
+predict.unseen<-predict(fit,test,type = 'class')
+# Testing passenger who didn't make it vs those who did
+table.mat<-table(test$survived,predict.unseen)
+table.mat
+
+# Measure performance with confusion matrix
+accuracy.test<-sum(diag(table.mat)) / sum(table.mat)
+print(paste('Accuracy for test',accuracy.test))
+# 91% accuracy
+
+# Try to improve accuracy
+accuracy.tune<-function(fit){
+  predict.unseen<-predict(fit,test,type = 'class')
+  table.mat<-table(test$survived,predict.unseen)
+  accuracy.test<-sum(diag(table.mat)) / sum(table.mat)
+  accuracy.test
+}
+control<-rpart.control(minsplit = 4,
+                       minbucket = round(5/3),
+                       maxdepth = 3,
+                       cp = 0)
+tune.fit<-rpart(survived~.,data = train,method = 'class',control = control)
+accuracy.tune(tune.fit)
+# Accuracy was only 88% so first method was best method
